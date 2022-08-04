@@ -1,0 +1,82 @@
+namespace user
+
+# Use this (or extend it) whenever a minimal amount of user information needs
+# to be provided. Re-using this provides consistency.
+struct UserBasicInfo
+    user_id String(min_length=1)
+    username String(min_length=1)
+    name String(min_length=1)
+
+# --
+
+route me(Void, MeInfo, Void)
+
+struct MeInfo
+    user_id String(min_length=1)
+    username String(min_length=1)
+    name String(min_length=1)
+    ego_feed_id String(min_length=1)
+        "The ID of the ego feed for this user. All users have one by default."
+    save_for_later_feed_id String(min_length=1)
+        "The ID of the save for later feed for this user. All users have one by
+        default."
+    is_subscriber Boolean
+    is_creator Boolean
+    bio String(min_length=1)?
+    website String(min_length=1)?
+    reputation Int32
+    reego UInt32
+
+# --
+
+route update_name(UpdateNameArg, MeInfo, UpdateNameError)
+
+struct UpdateNameArg
+    name String(min_length=1, max_length=128)
+
+union UpdateNameError
+    bad_name
+
+# --
+
+route update_bio(UpdateBioArg, MeInfo, UpdateBioError)
+
+struct UpdateBioArg
+    bio String(min_length=1, max_length=128)?
+
+union UpdateBioError
+    bad_bio
+
+# --
+
+route update_website(UpdateWebsiteArg, MeInfo, UpdateWebsiteError)
+
+struct UpdateWebsiteArg
+    website String(min_length=1, max_length=100)?
+
+union UpdateWebsiteError
+    bad_url
+
+# --
+
+route get(GetArg, UserInfo, GetError)
+    "Get information about a user."
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct GetArg
+    user_id String(min_length=1)
+
+union GetError
+    bad_user_id
+
+struct UserInfo
+    user_id String(min_length=1)
+    username String(min_length=1)
+    ego_feed_id String(min_length=1)
+    name String(min_length=1)
+    bio String(min_length=1)?
+    website String(min_length=1)?
+    reputation Int32
+    reego UInt32

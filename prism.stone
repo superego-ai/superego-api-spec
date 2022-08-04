@@ -1,0 +1,53 @@
+namespace prism
+
+import feed
+
+struct PrismInfo
+    prism_id String(min_length=1)
+        "Compatible with feed group routes to modify the
+        group."
+
+# --
+
+route get (PrismGetArg, PrismGetResult, PrismGetError)
+    "Return information about prism."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct PrismGetArg
+    prism_id String(min_length=1)
+
+struct PrismGetResult
+    prism PrismInfo
+    root_feed feed.FeedInfo
+
+union PrismGetError
+    bad_prism_id
+
+# --
+
+struct AudienceInfo
+    audience_id String(min_length=1)
+        "Compatible with feed group routes to modify the
+        group."
+    name String(min_length=1)
+
+# --
+
+route audience/get (AudienceGetArg, AudienceGetResult, AudienceGetError)
+    "Return information about the audience."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct AudienceGetArg
+    audience_id String(min_length=1)
+
+struct AudienceGetResult
+    audience AudienceInfo
+
+union AudienceGetError
+    bad_audience_id

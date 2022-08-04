@@ -1,0 +1,18 @@
+namespace rss
+
+
+route get_rss_info (GetRssInfoArg, GetRssInfoResult, GetRssInfoError)
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetRssInfoArg
+    feed_id String(min_length=1)
+
+struct GetRssInfoResult
+    rss_url String(min_length=1)
+    homepage_url String(min_length=1)?
+
+union GetRssInfoError
+    bad_feed_id
+    bad_feed_type

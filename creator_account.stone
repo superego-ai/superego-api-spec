@@ -1,0 +1,121 @@
+namespace creator_account
+
+import common
+
+# --
+
+route get_status(Void, CreatorStatus, GetStatusError)
+
+struct CreatorStatus
+    creator_id String(min_length=1)
+    last_accepted_tos AcceptedTos?
+        struct
+            ts common.ItTimestamp
+            version UInt32
+    linked_payout_method Boolean
+        "Whether the user has setup their Stripe Express Account for getting
+        disbursements."
+
+union GetStatusError
+    not_creator
+        "If the user has not designated themselves as a creator."
+
+# --
+
+route get_tos(Void, GetTosResult, Void)
+
+struct GetTosResult
+    tos_version UInt32
+    tos String(min_length=1)
+
+# --
+
+route accept_tos(AcceptTosArg, Void, AcceptTosError)
+
+struct AcceptTosArg
+    tos_version UInt32
+
+union AcceptTosError
+    not_creator
+        "If the user has not designated themselves as a creator."
+
+# --
+
+route get_revenue_for_day(GetRevenueForDayArg, GetRevenueForDayResult, GetRevenueForDayError)
+    "Get revenue on a single day."
+
+struct GetRevenueForDayArg
+    day common.ItTimestamp
+
+# TODO: Add a concept of a finalized revenue.
+# i.e. the revenue is immutable if flag is true.
+# Non-zero revenue isn't necessarily final.
+struct GetRevenueForDayResult
+    revenue Int32
+        "In cents."
+    num_tips UInt32
+    num_slices UInt32
+
+union GetRevenueForDayError
+    not_creator
+
+
+# --
+
+route get_revenue_for_past_week(Void, GetRevenueForPastWeekResult, GetRevenueForPastWeekError)
+    "Get revenue for the previous seven days, not including today."
+
+struct GetRevenueForPastWeekResult
+    reports List(DailyRevenueReport, min_items=7, max_items=7)
+
+struct DailyRevenueReport
+    day common.ItTimestamp
+    revenue Int32
+        "In cents."
+    num_tips UInt32
+    num_slices UInt32
+
+union GetRevenueForPastWeekError
+    not_creator
+
+# --
+
+# TODO: Convert this to iter & iter/next.
+route creator_of/all(Void, CreatorOfAllResult, CreatorOfAllError)
+    "Get a list of all URLs that a user is tracked as a creator of."
+
+struct CreatorOfAllResult
+    attributions List(CreatorAttribution)
+
+union CreatorOfAllError
+    not_creator
+        "If the user has not designated themselves as a creator."
+
+struct CreatorAttribution
+    url String(min_length=1)
+    role String(min_length=1)
+    weight UInt32
+    attributed_by CreatorAttributedBy
+    added_at common.ItTimestamp
+    tips_incoming TipsIncoming
+        union
+            none
+            exact TipsIncomingSummary
+            lower_bound TipsIncomingSummary
+    bonus_mention Boolean
+
+
+struct TipsIncomingSummary
+    count UInt32
+    next_payout common.ItTimestamp
+
+
+union CreatorAttributedBy
+    domain
+    linked_account
+    meta_tag
+    staff
+    url_prefix
+    youtube_channel
+
+# --

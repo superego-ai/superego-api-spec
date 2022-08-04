@@ -1,0 +1,448 @@
+namespace feed
+
+import common
+
+# --
+
+route get (GetArg, FeedInfo, GetError)
+    "Get information about a feed."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetArg
+    feed_id String(min_length=1)
+
+struct FeedInfo
+    feed_id String(min_length=1)
+    name String(min_length=1)
+    url_name String(min_length=1)
+    type FeedType
+    blurb String(min_length=1)?
+        "A short description of the feed."
+    perm_public_read Boolean
+        "Whether the feed should be shown on the user's profile and read
+        accessible to everyone."
+    publisher FeedPublisher?
+        "Unset if it's a hashtag feed."
+        struct
+            user_id String(min_length=1)
+            username String(min_length=1)
+            name String(min_length=1)
+    followers UInt64
+        "Number of users following this feed."
+    for_viewer FeedInfoForViewer
+        struct
+            following Boolean
+            perm FeedPermission
+                struct
+                    admin Boolean
+                    read Boolean
+                    write Boolean
+    default_ordering EntryOrderBy
+    primary_domain String?
+        "A domain name associated with the majority of the content in this
+        feed. If set, clients should not display the domain along with the
+        entry as it's considered redundant."
+    style Style?
+        struct
+            header_bg_color String?
+            body_bg_color String?
+    prism_id String(min_length=1)?
+    audience_id String(min_length=1)?
+
+union FeedType
+    archive
+    curated
+    ego
+    favorites
+    hashtag
+    notif
+    reports
+    rss
+    save_for_later
+    visited
+    works
+
+union GetError
+    not_found
+    no_permission
+
+union EntryOrderBy
+    "If null, uses the feed's default."
+    time
+    score
+
+# --
+
+route create(FeedCreateArg, FeedInfo, FeedCreateError)
+    "Create a new feed for a user."
+
+struct FeedCreateArg
+    name String(min_length=1)
+    blurb String(max_length=100)?
+    perm_public_read Boolean = false
+        "Whether the feed should be shown on the user's profile and read
+        accessible to everyone."
+    default_ordering EntryOrderBy = time
+
+
+union FeedCreateError
+    name_conflict
+        ":field:`FeedCreateArg.name` or its simplified version used for URLs
+        conflicts with another one for this user."
+    reserved
+        ":field:`FeedCreateArg.name` or its simplified version used for URLs
+        is reserved."
+
+# --
+
+route update_perm_public_read(UpdatePermPublicReadArg, FeedInfo, UpdatePermPublicReadError)
+    "Update the public read permission for a feed."
+
+struct UpdatePermPublicReadArg
+    feed_id String(min_length=1)
+    perm_public_read Boolean
+
+union UpdatePermPublicReadError
+    feed_not_found
+    no_permission
+
+# --
+
+route update_default_ordering(UpdateDefaultOrderingArg, FeedInfo, UpdateDefaultOrderingError)
+    "Update the default ordering for a feed."
+
+struct UpdateDefaultOrderingArg
+    feed_id String(min_length=1)
+    default_ordering EntryOrderBy
+
+union UpdateDefaultOrderingError
+    feed_not_found
+    no_permission
+
+# --
+
+route update_blurb(UpdateBlurbArg, FeedInfo, UpdateBlurbError)
+    "Update the blurb for a feed."
+
+struct UpdateBlurbArg
+    feed_id String(min_length=1)
+    blurb String(max_length=100)?
+
+union UpdateBlurbError
+    feed_not_found
+    no_permission
+
+# --
+
+route iter (FeedIterArg, FeedIterResult, FeedIterError)
+    "Iterate through feeds."
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+union UserRef
+    id String(min_length=1)
+    username String(min_length=1)
+
+struct FeedIterArg
+    user_ref UserRef?
+        "The user whose feeds to return. If unset, the feeds of the
+        authenticated user will be returned. If no user is authenticated, this
+        must be set."
+    limit UInt64(min_value=1) = 20
+        "The maximum number of feeds to return. Fewer than this number of feeds
+        may be returned even if there are more feeds to iterate through."
+
+struct FeedIterResult
+    feeds List(FeedInfo)
+    cursor String(min_length=1)?
+        "Set if there are more results available."
+    has_more Boolean
+
+union FeedIterError
+    bad_user_ref
+
+# --
+
+route iter/next (FeedIterNextArg, FeedIterResult, FeedIterNextError)
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct FeedIterNextArg
+    cursor String(min_length=1)
+    limit UInt64(min_value=1) = 20
+
+union FeedIterNextError
+    bad_cursor
+        ":field:`FeedIterNextArg.cursor` was not valid."
+
+# --
+
+route popular (Void, PopularResult, Void)
+    "Return popular feeds."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct PopularResult
+    feeds List(FeedInfo)
+
+# --
+
+route popular2 (Void, Popular2Result, Void)
+    "Return popular feeds."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct Popular2Result
+    users List(FeedInfo)
+    feeds List(FeedInfo)
+    hashtags List(FeedInfo)
+
+# --
+
+route popular3 (Void, Popular3Result, Void)
+    "Return popular feeds."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct Popular3Result
+    categories List(PopularByCategory)
+    topics List(PopularByCategory)
+    people List(PopularByCategory)
+
+struct PopularByCategory
+    category String(min_length=1)
+    feeds List(FeedInfo)
+
+# --
+
+route onboarding_topics (Void, OnboardingTopicsResult, Void)
+    "Return onboarding topic feeds."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct OnboardingTopicsResult
+    topics List(FeedInfo)
+
+# --
+
+route delete (FeedDeleteArg, Void, FeedDeleteError)
+    "Delete a feed. User must have the admin permission for the feed."
+
+struct FeedDeleteArg
+    feed_id String(min_length=1)
+
+union FeedDeleteError
+    feed_not_found
+    no_permission
+
+# --
+
+route follow (FollowArg, FollowResult, FollowError)
+    "Follow a feed with public read permissions."
+
+struct FollowArg
+    feed_id String(min_length=1)
+
+struct FollowResult
+    feed FeedInfo
+
+union FollowError
+    feed_not_found
+    no_permission
+        "User must have read permission to a feed to follow it. This error is
+        also produced if a user attempts to follow their own ego feed."
+    already_following
+
+# --
+
+route unfollow (UnfollowArg, UnfollowResult, UnfollowError)
+    "Unfollow a feed."
+
+struct UnfollowArg
+    feed_id String(min_length=1)
+
+struct UnfollowResult
+    feed FeedInfo
+
+union UnfollowError
+    feed_not_found
+    not_following
+
+# --
+
+route follow_rss (FollowRssArg, FollowRssResult, FollowRssError)
+    "Follow RSS feed with public read permissions."
+
+struct FollowRssArg
+    rss_url String(min_length=1)
+
+struct FollowRssResult
+    feed FeedInfo
+
+union FollowRssError
+    bad_rss_url
+    already_following
+
+# --
+
+route change_pos (ChangePosArg, Void, ChangePosError)
+    "Change the position the feed is returned by :route:`iter` and
+    :route:`iter/next`."
+
+struct ChangePosArg
+    feed_id String(min_length=1)
+    after_feed_id String(min_length=1)?
+        "The feed to move feed_id after. If empty, moves to top of list."
+
+union ChangePosError
+    bad_feed_id
+    bad_after_feed_id
+
+# --
+
+route rename (RenameArg, RenameResult, RenameError)
+    "Rename a feed.
+
+    The caller must have admin access on the feed. However, they do not need to
+    be the publisher of the feed."
+
+struct RenameArg
+    feed_id String(min_length=1)
+    name String(min_length=1)
+
+struct RenameResult
+    feed FeedInfo
+
+union RenameError
+    feed_not_found
+    no_permission
+    name_conflict
+        ":field:`RenameArg.name` or its simplified version used for URLs
+        conflicts with another one for the feed's publisher."
+    reserved
+        ":field:`RenameArg.name` or its simplified version used for URLs
+        is reserved."
+
+# --
+
+route set_primary_domain (SetPrimaryDomainArg, SetPrimaryDomainResult, SetPrimaryDomainError)
+
+struct SetPrimaryDomainArg
+    feed_id String(min_length=1)
+    primary_domain String(min_length=1, max_length=100)?
+
+struct SetPrimaryDomainResult
+    feed FeedInfo
+
+union SetPrimaryDomainError
+    bad_feed_id
+    bad_domain
+    no_permission
+
+# --
+
+route set_style (SetStyleArg, SetStyleResult, SetStyleError)
+
+struct SetStyleArg
+    feed_id String(min_length=1)
+    header_bg_color ColorArg?
+    body_bg_color ColorArg?
+
+union ColorArg
+    reset
+    color String(min_length=1, max_length=50)
+
+struct SetStyleResult
+    feed FeedInfo
+
+union SetStyleError
+    bad_feed_id
+    no_permission
+    bad_color
+
+# --
+
+route notification_policy/get (NotificationPolicyGetArg, NotificationPolicyGetResult, NotificationPolicyGetError)
+
+struct NotificationPolicyGetArg
+    feed_id String(min_length=1)
+
+struct NotificationPolicyGetResult
+    notification_policy NotificationPolicy
+        union
+            none
+            notify
+
+union NotificationPolicyGetError
+    bad_feed_id
+
+# --
+
+route notification_policy/set (NotificationPolicySetArg, Void, NotificationPolicySetError)
+
+struct NotificationPolicySetArg
+    feed_id String(min_length=1)
+    notify Boolean
+
+union NotificationPolicySetError
+    bad_feed_id
+    no_permission
+        "User does not have adequate permissions to receive notifications from
+        this feed."
+
+# --
+
+route group/get (GroupGetArg, GroupGetResult, GroupGetError)
+    "Get information for feed group."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GroupGetArg
+    group_id String(min_length=1)
+
+struct GroupGetResult
+    group FeedGroup
+
+struct FeedGroup
+    group_id String(min_length=1)
+    name String(min_length=1)
+    members List(FeedGroupMember)
+    type GroupType
+        union
+            regular
+            prism
+            audience
+
+union FeedGroupMember
+    feed GroupFeedMember
+        struct
+            feed FeedInfo
+            pos Int32?
+    embed GroupEmbedMember
+        struct
+            feed FeedInfo
+            pos Int32?
+            tagline String(min_length=1)?
+    sub_group GroupSubGroupMember
+        struct
+            group FeedGroup
+            pos Int32?
+            tagline String(min_length=1)?
+
+union GroupGetError
+    bad_group_id

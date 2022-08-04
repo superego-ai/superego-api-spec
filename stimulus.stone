@@ -1,0 +1,183 @@
+namespace stimulus
+
+import common
+import feed
+
+route get (GetArg, GetResult, GetError)
+    "Get information about a url."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct GetArg
+    url String(min_length=1)
+
+struct GetResult
+    canonical_url String(min_length=1)?
+    creators List(Creator)
+    normalized_url String(min_length=1)?
+    trace_thread_id String(min_length=1)?
+    qna_thread_id String(min_length=1)?
+    topics List(Topic)
+    # TODO: Consider converting this to union so a feed that the user does not
+    # have access to can be indicated (currently, it's omitted).
+    debut Debut?
+        "Only set if stimulus is a post."
+        struct
+            entry_id String(min_length=1)
+            feed feed.FeedInfo
+                "The feed the post was first posted on."
+
+struct Topic
+    hashtag String(min_length=1)
+    active Boolean
+    feed feed.FeedInfo?
+
+struct Creator
+    union
+        inferred InferredCreator
+        unlinked UnlinkedCreator
+        linked LinkedCreator
+
+    role String(min_length=1)
+    name String(min_length=1)?  # FIXME: Can we make this required?
+
+struct InferredCreator extends Creator
+    ""
+
+struct UnlinkedCreator extends Creator
+    ""
+    creator_id String(min_length=1)
+    weight UInt32
+
+struct LinkedCreator extends Creator
+    ""
+    creator_id String(min_length=1)
+    weight UInt32
+    linked_user LinkedUser
+        struct
+            user_id String(min_length=1)
+            username String(min_length=1)
+            name String(min_length=1)
+
+union GetError
+    bad_url
+        "Not a valid URL."
+
+# --
+
+route get_rss (GetRssArg, GetRssResult, GetRssError)
+    "Get RSS feeds for a url."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct GetRssArg
+    url String(min_length=1)
+
+struct GetRssResult
+    rss_feeds List(RssFeed)
+
+struct RssFeed
+    url String(min_length=1)
+    title String(min_length=1)?
+    following Boolean
+    feed_id String(min_length=1)?
+
+union GetRssError
+    bad_url
+        "Not a valid URL."
+
+# --
+
+route get_commentary (GetCommentaryArg, GetCommentaryResult, GetCommentaryError)
+    "Get commentary around the web about a url."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct GetCommentaryArg
+    url String(min_length=1)
+
+struct GetCommentaryResult
+    submissions List(SocialSubmission)
+    first_party_discussion FirstPartyDiscussion?
+        struct
+            url String(min_length=1)?
+                "Only set if the discussion url differs from the stimulus url."
+            comments UInt32?
+            points UInt32?
+
+struct SocialSubmission
+    union
+        hn HackerNewsSubmission
+        reddit RedditSubmission
+
+    url String(min_length=1)
+    created common.ItTimestamp
+    hide Boolean
+
+struct HackerNewsSubmission extends SocialSubmission
+    title String
+    points UInt32
+    num_comments UInt32
+
+struct RedditSubmission extends SocialSubmission
+    subreddit String
+    title String
+    ups UInt32
+    num_comments UInt32
+
+union GetCommentaryError
+    bad_url
+        "Not a valid URL."
+
+# --
+
+route ego/iter (EgoIterArg, EgoIterResult, EgoIterError)
+    "Iterate through all entries that egoed a URL."
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct EgoIterArg
+    url String(min_length=1)
+    limit UInt64(min_value=1) = 10
+
+struct EgoIterResult
+    entries List(EgoInfo)
+    cursor String(min_length=1)?
+    has_more Boolean
+
+struct EgoInfo
+    entry_id String(min_length=1)
+    feed feed.FeedInfo
+    added_at common.ItTimestamp
+    weight Int32(min_value=1, max_value=4)
+    locked Boolean
+    blabber String(min_length=1)?
+    settled_status feed.SettledStatus
+    via feed.Via?
+
+union EgoIterError
+    bad_url
+
+# --
+
+route ego/iter/next (EgoIterNextArg, EgoIterResult, EgoIterNextError)
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+# --
+
+struct EgoIterNextArg
+    cursor String(min_length=1)
+    limit UInt64(min_value=1) = 10
+
+union EgoIterNextError
+    bad_cursor
+        ":field:`EgoIterNextArg.cursor` was not valid."

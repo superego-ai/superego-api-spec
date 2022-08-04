@@ -1,0 +1,29 @@
+namespace topic
+
+import feed
+
+route get_wiki_url (GetWikiUrlArg, GetWikiUrlResult, GetWikiUrlError)
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetWikiUrlArg
+    feed_id String(min_length=1)
+
+struct GetWikiUrlResult
+    wiki_url String(min_length=1)?
+
+union GetWikiUrlError
+    bad_feed_id
+    bad_feed_type
+
+# --
+
+route recommend (Void, RecommendResult, Void)
+    "Get topic-based recommendations."
+
+    attrs
+        auth = "user"
+
+struct RecommendResult
+    recommendations List(feed.FeedInfo)

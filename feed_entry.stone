@@ -1,0 +1,549 @@
+namespace feed
+
+import common
+
+# --
+
+route entry/add (EntryAddArg, EntryAddResult, EntryAddError)
+    "Add an entry to a feed."
+
+    attrs
+        auth = "user"
+
+struct EntryAddArg
+    feed_id String(min_length=1)
+    url String(min_length=1)
+    blabber String(min_length=1, max_length=500)?
+    via String(min_length=1)?
+        "Set if another feed entry should be credited as the source of this
+        addition. If the value is invalid, it is ignored."
+    set_via SetVia?
+        struct
+            entry_id String(min_length=1)
+                "Set to another feed entry that should be credited as the
+                source of this addition. If the value is invalid, it is
+                ignored."
+            quote_source Boolean = false
+                "Whether to include the blabber of the via in this new entry."
+
+union EntryAddResult
+    new_entry FeedEntry
+    existing FeedEntry
+
+union EntryAddError
+    feed_not_found
+    no_permission
+    bad_feed_type
+    bad_url
+
+# --
+
+route entry/add_ego (EntryAddEgoArg, EntryAddResult, EntryAddEgoError)
+    "Add an entry to an ego feed."
+
+    attrs
+        auth = "user"
+
+struct EntryAddEgoArg extends EntryAddArg
+    weight Int32 = 1
+    review String(min_length=1, max_length=500)?
+        "Deprecated in favor of using :field:`EntryAddArg.blabber`."
+    intended_creator String(min_length=1, max_length=200)?
+
+union EntryAddEgoError extends EntryAddError
+    not_subscriber
+        "Only a current subscriber may ego a URL."
+    ego_limit_reached
+        "Can't give any more ego during this period."
+    self_ego
+        "Can't ego posts that are self-authored."
+
+# --
+
+route entry/add_post (EntryAddPostArg, EntryAddResult, EntryAddPostError)
+    "Add a post to a feed."
+
+    attrs
+        auth = "user"
+
+annotation HashRedactor = RedactedHash()
+
+struct EntryAddPostArg
+    feed_id String(min_length=1)
+    content String(min_length=1, max_length=10000)
+    image String(min_length=10, max_length=8000000)?
+        @HashRedactor
+        "Must be in data URI format. Only png & jpeg are supported."
+
+union EntryAddPostError extends EntryAddError
+    bad_content BadPostContentError
+    bad_image BadImageError
+
+union BadPostContentError
+    empty
+
+union BadImageError
+    unsupported_format
+        "Image was not a png or jpeg."
+    bad_encoding
+        "Unable to parse the image data."
+    too_many_bytes
+        "<= 8MB"
+    resolution_too_large
+        "<= 10,000px"
+    resolution_too_small
+        ">= 200px"
+
+
+# --
+
+
+route entry/add_report (EntryAddReportArg, EntryAddResult, EntryAddError)
+    "Add a report entry to the reports feed."
+
+    attrs
+        auth = "user"
+
+struct EntryAddReportArg extends EntryAddArg
+    report Report
+
+struct Report
+    bad_ads Boolean
+    clickbait_headline Boolean
+    factual_errors Boolean
+    misleading Boolean
+    plagarism Boolean
+    superficial_errors Boolean
+    warrants String(min_length=1)
+
+# --
+
+route entry/iter (EntryIterArg, EntryIterResult, EntryIterError)
+    "Iterate through entries in a feed."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct EntryIterArg
+    feed_id String(min_length=1)
+    limit UInt64(min_value=1) = 20
+        "The maximum number of entries to return."
+    order_by EntryOrderBy?
+
+struct EntryIterResult
+    feed FeedInfo
+    entries List(FeedEntry)
+    cursor String(min_length=1)?
+        "Set if there are more results available."
+    has_more Boolean
+    ordered_by EntryOrderBy
+
+union EntryIterError
+    feed_not_found
+    no_permission
+
+struct FeedEntry
+    union
+        archive ArchiveEntry
+        curated CuratedEntry
+        ego EgoEntry
+        favorites FavoritesEntry
+        hashtag HashtagEntry
+        notif NotifEntry
+        post PostEntry
+        reports ReportsEntry
+        rss RssEntry
+        save_for_later SaveForLaterEntry
+        visited VisitedEntry
+        works WorksEntry
+
+    entry_id String(min_length=1)
+    url String
+    url_canonical String?
+    added_at common.ItTimestamp
+    added_by FeedEntryAddedBy?
+    title String?
+        "If the entry has a title-override specific to this feed which is
+        different than the story's title in other feeds."
+    via Via?
+    js_mode JavascriptMode
+    md MetadataState
+    feed_ref_counts FeedRefCounts?
+    strong_ref StrongRef?
+        struct
+            url String
+            url_canonical String?
+            js_mode JavascriptMode
+            view_mode ViewMode
+            md MetadataState
+    for_viewer FeedEntryForViewer
+        struct
+            last_visit VisitedInfo?
+                struct
+                    when common.ItTimestamp
+                    progress Float32?
+            archived ArchivedInfo?
+                struct
+                    when common.ItTimestamp
+    hashtags EntryHashtags
+        struct
+            active List(String)
+            pending List(String)
+    has_cpc Boolean
+        "Whether this entry has Compact Portable Content. If true, get it with
+        :route:`entry/content/get`."
+    view_mode ViewMode?
+        "Unset if entry has strong ref."
+    trace_preview ThreadPreview?
+    qna_preview ThreadPreview?
+    discussion_preview DiscussionPreview?
+
+struct FeedEntryAddedBy
+    user_id String(min_length=1)
+    username String(min_length=1)
+    name String(min_length=1)
+
+struct Via
+    feed FeedInfo
+    quote ViaQuote?
+        struct
+            blabber String
+            author FeedEntryAddedBy
+
+struct ViewMode
+    cpc CpcViewMode?
+        "Unset if no cpc available."
+        struct
+            default Boolean
+                "If true, client should use the CPC as the default for opening
+                a story."
+    js JsViewMode
+        struct
+            no_js Boolean
+    ios_reader Boolean
+
+struct ThreadPreview
+    thread_id String(min_length=1)
+    comment_count UInt32
+    body String
+        "Body of a comment chosen as a preview of the thread."
+    reply_count UInt32
+        "Number of replies to the previewed comment."
+
+struct DiscussionPreview
+    discussion_count UInt32
+    name String(min_length=1)
+    url String(min_length=1)
+    points UInt32?
+    comment_count UInt32?
+
+# Use a union to leave open the possibility for a third "some JS" option.
+union JavascriptMode
+    no
+    yes
+
+union MetadataState
+    ready Metadata
+        struct
+            title String?
+            content_type ContentType
+                "The inferred content type of the URL resource."
+                union
+                    html
+                    pdf
+                    post
+                    video VideoMetadata
+                        struct
+                            duration UInt32?
+                                "Duration in seconds."
+                            portrait Boolean?
+                                "Whether the video aspect ratio is known to be
+                                portrait mode."
+                    unknown
+            blurb String?
+                "A short description of the stimulus."
+            description String?
+            image Image?
+            thumbnail Image?
+            external_comments UInt32
+                "Deprecated, use total_comments."
+            external_points UInt32
+                "Deprecated, use total_points."
+            total_comments UInt32
+                "Includes 1st party comments and discussion sites."
+            total_points UInt32
+                "Includes 1st party points and discussion sites."
+            extracted_at common.ItTimestamp
+            published_at common.ItTimestamp?
+            modified_at common.ItTimestamp?
+            paywalled Boolean
+            hashtags_suggested List(String)
+            named_entities List(String)
+            post PostMetadata?
+                struct
+                    author PostAuthor?
+                        "Unset if it's a notif feed."
+                        struct
+                            user_id String(min_length=1)
+                            username String(min_length=1)
+                            name String(min_length=1)
+                    content String
+                        "Markdown format."
+                    debut Boolean
+                        "Whether this is the original occurrence of the post."
+    not_ready
+    failed
+
+struct Image
+    url String
+    width UInt32
+    height UInt32
+
+struct FeedRefCounts
+    archive UInt64
+    curated UInt64
+    ego UInt64
+    favorites UInt64
+    reports UInt64
+    save_for_later UInt64
+
+struct ArchiveEntry extends FeedEntry
+    ""
+
+struct CuratedEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+
+struct FavoritesEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+
+struct HashtagEntry extends FeedEntry
+    ""
+
+struct NotifEntry extends FeedEntry
+    ""
+
+struct PostEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+
+struct ReportsEntry extends FeedEntry
+    ""
+    report Report
+
+struct RssEntry extends FeedEntry
+    ""
+
+struct SaveForLaterEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+
+struct EgoEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+    weight Int32(min_value=1, max_value=4)
+    locked Boolean
+        "If true, the shared ego cannot be modified or returned."
+    settled_status SettledStatus
+    review String?
+    intended_creator String?
+
+union SettledStatus
+    unsettled
+    error_delinquent
+        "The current user's subscription was delinquent."
+    error_no_user
+        "The creator has not been identified or does not have an
+        account with us."
+    settled SettledInfo
+        struct
+            amount Int32
+                "In cents."
+
+struct VisitedEntry extends FeedEntry
+    ""
+
+struct WorksEntry extends FeedEntry
+    blabber String(min_length=1, max_length=10000)?
+
+# --
+
+route entry/iter/next (EntryIterNextArg, EntryIterResult, EntryIterNextError)
+    attrs
+        auth = "user_optional"
+
+struct EntryIterNextArg
+    cursor String(min_length=1)
+    limit UInt64(min_value=1) = 20
+
+union EntryIterNextError
+    bad_cursor
+        ":field:`EntryIterNextArg.cursor` was not valid."
+    no_permission
+
+# --
+
+route entry/remove (EntryRemoveArg, Void, EntryRemoveError)
+    "Remove an entry from a feed."
+
+struct EntryRemoveArg
+    entry_id String(min_length=1)
+
+union EntryRemoveError
+    bad_entry_id
+    no_permission
+    locked
+        "The ego entry is locked for disbursement and cannot be removed."
+
+# --
+
+route entry/archive (EntryArchiveArg, FeedEntry, EntryArchiveError)
+    "Add entry to the user's archive feed."
+
+struct EntryArchiveArg
+    entry_id String(min_length=1)
+
+union EntryArchiveError
+    bad_entry_id
+    bad_feed_type
+    no_permission
+
+# --
+
+route entry/archive2 (EntryArchiveArg, EntryArchiveResult, EntryArchiveError)
+    "Add entry to the user's archive feed.
+
+    Augments :route:`entry/archive` with the archive entry."
+
+struct EntryArchiveResult
+    updated_entry FeedEntry
+    archive_entry FeedEntry
+
+# --
+
+route entry/unarchive (EntryUnarchiveArg, FeedEntry, EntryUnarchiveError)
+    "Remove entry from the user's archive."
+
+struct EntryUnarchiveArg
+    entry_id String(min_length=1)
+
+union EntryUnarchiveError
+    bad_entry_id
+    no_permission
+
+# --
+
+route entry/mark_progress (EntryMarkProgressArg, Void, EntryMarkProgressError)
+    "Mark the progress the user has made through a story. The story must have
+    already been added to the user's visited feed."
+
+struct EntryMarkProgressArg
+    entry_id String(min_length=1)
+    progress Float32(min_value=0, max_value=100)
+        "Unit is the % of the story consumed. It's up to the client how to
+        translate the % to an actual spot in the content whether audio, video,
+        or text."
+
+union EntryMarkProgressError
+    bad_entry_id
+    no_permission
+    entry_unvisited
+        "Entry is not in the user's visited feed."
+
+# --
+
+route entry/refresh (EntryRefreshArg, FeedEntry, EntryRefreshError)
+    "Return the latest information for a feed entry."
+
+    attrs
+        auth = "user_optional"
+
+struct EntryRefreshArg
+    entry_id String(min_length=1)
+
+union EntryRefreshError
+    bad_entry_id
+    no_permission
+
+# --
+
+route entry/get (EntryGetArg, EntryGetResult, EntryGetError)
+    "Return the latest feed entry along with the feed it's in."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct EntryGetArg
+    entry_id String(min_length=1)
+
+struct EntryGetResult
+    entry FeedEntry
+    feed FeedInfo
+
+union EntryGetError
+    bad_entry_id
+    no_permission
+
+# --
+
+route entry/content/get (EntryContentGetArg, EntryContentGetResult, EntryContentGetError)
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct EntryContentGetArg
+    entry_id String(min_length=1)
+
+struct EntryContentGetResult
+    content_type EntryContentTypeOutput
+        union
+            markdown
+    content String
+    updated_at common.ItTimestamp?
+
+union EntryContentGetError
+    bad_entry_id
+    no_content
+
+# --
+
+route entry/update_post (EntryUpdatePostArg, EntryUpdatePostResult, EntryUpdatePostError)
+    "Update a post."
+
+    attrs
+        auth = "user"
+
+struct EntryUpdatePostArg
+    entry_id String(min_length=1)
+    content String(min_length=1, max_length=10000)
+
+struct EntryUpdatePostResult
+    updated_entry FeedEntry
+
+union EntryUpdatePostError
+    bad_entry_id
+    no_permission
+    not_post
+    not_debut
+    bad_content BadPostContentError
+
+# --
+
+route entry/get_url_for_sharing (EntryGetUrlForSharingArg, EntryGetUrlForSharingResult, EntryGetUrlForSharingError)
+    "Return the best URL for sharing a story.
+
+    Makes a best effort attempt to find a /e/ URL for sharing the entry. If not
+    possible because the containing feeds are private, falls back to the
+    entry's direct URL."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 60
+
+struct EntryGetUrlForSharingArg
+    entry_id String(min_length=1)
+
+struct EntryGetUrlForSharingResult
+    url String(min_length=1)
+
+union EntryGetUrlForSharingError
+    bad_entry_id
+    no_permission

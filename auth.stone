@@ -1,0 +1,7 @@
+namespace auth
+
+union AuthError
+    invalid_session
+    invalid_token
+    invalid_as_user
+    insufficient_permissions

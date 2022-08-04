@@ -1,0 +1,15 @@
+namespace stone_cfg
+
+struct Route
+    auth String = "user"
+        "The authentication type for the route. Valid values: user,
+        user_optional, and noauth."
+    staff_only Boolean = false
+        "Whether authorization target requires staff permission."
+    fsm_only Boolean = false
+        "Whether authorization target requires staff w/ fsm permission."
+    cache_control_ttl_if_noauth UInt32?
+        "Only applies if a route is called without auth (user_optional or
+        noauth) and has the exact same arg as before. Cache control is set to
+        the number of seconds as the associated value. It's expected that the
+        NGINX frontend will microcache."

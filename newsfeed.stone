@@ -1,0 +1,92 @@
+namespace newsfeed
+
+import feed
+
+route entry/iter (EntryIterArg, EntryIterResult, Void)
+    "Return newsfeed entries."
+
+struct EntryIterArg
+    limit UInt64(min_value=1) = 10
+    order_by feed.EntryOrderBy = score
+
+struct EntryIterResult
+    entries List(NewsfeedEntry)
+    cursor String(min_length=1)?
+        "Set if there are more results available."
+    has_more Boolean
+    ordered_by feed.EntryOrderBy
+    infrequent_feeds_to_highlight List(feed.FeedInfo)
+    embeds List(FeedEmbed)
+
+struct FeedEmbed
+    pos UInt32
+    feed feed.FeedInfo
+    subtitle String?
+
+struct NewsfeedEntry
+    feed feed.FeedInfo
+    entry feed.FeedEntry
+    plugged Boolean?
+        "Whether this is the last entry from this feed that will be included
+        in the newsfeed. Clients are suggested to setup a section for the feed
+        for users to quickly explore further entries."
+
+union EntryIterNextError
+    bad_cursor
+        ":field:`EntryIterNextArg.cursor` was not valid."
+    no_permission
+
+# --
+
+route entry/iter_default (EntryIterArg, EntryIterResult, Void)
+    "Return entries for default newsfeed."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+# --
+
+route entry/iter_as_user (EntryIterAsUserArg, EntryIterResult, EntryIterAsUserError)
+    "Return another user's newsfeed."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct EntryIterAsUserArg extends EntryIterArg
+    user_ref feed.UserRef
+
+union EntryIterAsUserError
+    bad_user_ref
+
+# --
+
+route entry/iter/next (EntryIterNextArg, EntryIterResult, EntryIterNextError)
+    "Return more newsfeed entries beginning from cursor."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct EntryIterNextArg
+    cursor String(min_length=1)
+    limit UInt64(min_value=1) = 10
+
+# --
+
+route filter/get (Void, FilterGetResult, Void)
+
+struct FilterGetResult
+    filters List(Filter)
+
+struct Filter
+    active Boolean
+    hashtags List(String(min_length=1, max_length=50), max_items=8)
+
+# --
+
+route filter/set (FilterSetArg, Void, Void)
+
+struct FilterSetArg
+    filters List(Filter, max_items=100)

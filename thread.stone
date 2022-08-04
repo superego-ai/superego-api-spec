@@ -1,0 +1,208 @@
+namespace thread
+    "Functionality encompassing threads, comments, and voting."
+
+import common
+
+alias ThreadId = String(min_length=1)
+alias CommentId = String(min_length=1)
+
+# --
+
+route comment/add (CommentAddArg, CommentAddResult, CommentAddError)
+    "Add a new comment or reply to a thread."
+
+struct CommentAddArg
+    thread_id ThreadId
+    parent_id CommentId?
+    body String(min_length=1, max_length=10000)
+    via String?
+        "The feed entry ID that led the user to this thread."
+
+struct CommentAddResult
+    thread ThreadInfo
+    comment Comment
+
+struct ThreadInfo
+    thread_id ThreadId
+    comment_count UInt32
+
+struct Comment
+    comment_id CommentId
+    ts common.ItTimestamp
+        "When comment was originally made."
+    replies_count UInt32
+        "Number of direct replies to this comment."
+    replies List(Comment)
+        "A list (possibly subset) of replies. To gather more, use
+        :route:`get_replies`."
+    author CommentAuthor
+        struct
+            user_id String(min_length=1)
+            username String(min_length=1)
+            name String(min_length=1)
+    body String
+    points Int32
+    parent_id CommentId?
+        "If this comment is a reply, the parent_id identifies the comment being
+        replied to."
+    deleted_at common.ItTimestamp?
+    last_edited common.ItTimestamp?
+    for_viewer CommentForViewer
+        struct
+            voted Voted?
+                "Only set if the viewing user has voted on this comment."
+                struct
+                    up Boolean
+
+union CommentAddError
+    bad_thread_id
+    bad_parent_id
+    parent_disallowed
+
+# --
+
+route comment/upvote (CommentUpvoteArg, Void, CommentUpvoteError)
+    "Up-vote a comment."
+
+struct CommentUpvoteArg
+    comment_id CommentId
+
+union CommentUpvoteError
+    bad_comment_id
+    no_self_vote
+    deleted_comment
+
+# --
+
+route comment/downvote (CommentDownvoteArg, Void, CommentDownvoteError)
+    "Down-vote a comment."
+
+struct CommentDownvoteArg
+    comment_id CommentId
+
+union CommentDownvoteError
+    bad_comment_id
+    no_self_vote
+    deleted_comment
+
+# --
+
+route comment/unvote (CommentUnvoteArg, Void, CommentUnvoteError)
+    "Retract an earlier vote on a comment."
+
+struct CommentUnvoteArg
+    comment_id CommentId
+
+union CommentUnvoteError
+    bad_comment_id
+    no_self_vote
+    deleted_comment
+
+# --
+
+route comment/delete (CommentDeleteArg, CommentDeleteResult, CommentDeleteError)
+    "Delete a comment.
+
+    While the comment's body will no longer be returned, the metadata of the
+    comment remains as a tombstone."
+
+struct CommentDeleteArg
+    comment_id CommentId
+
+union CommentDeleteError
+    bad_comment_id
+    no_permission
+
+struct CommentDeleteResult
+    comment Comment
+
+# --
+
+route get_tree (GetTreeArg, GetTreeResult, GetTreeError)
+    "Returns comments associated with a thread.
+
+    Note that each top-level comment is its own tree (has no parent). It's
+    likely that not all of the comments will be returned. To gather the rest,
+    use :route:`get_replies` and :route:`get_siblings`."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetTreeArg
+    thread_id ThreadId
+    max_depth MaxDepth = 5
+    max_replies_per_level MaxRepliesPerLevel = 100
+
+alias MaxDepth = UInt32(min_value=1, max_value=8)
+alias MaxRepliesPerLevel = UInt32(min_value=1, max_value=1000)
+
+struct GetTreeResult
+    thread ThreadInfo
+    root_comments List(Comment)
+    root_comment_count UInt32
+
+union GetTreeError
+    bad_thread_id
+
+# --
+
+route get_siblings (GetSiblingsArg, GetSiblingsResult, GetSiblingsError)
+    "Returns siblings (and their descendants) of a specified comment."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetSiblingsArg
+    thread_id ThreadId
+    comment_id CommentId
+    max_depth MaxDepth = 5
+    max_replies_per_level MaxRepliesPerLevel = 100
+
+struct GetSiblingsResult
+    thread ThreadInfo
+    siblings List(Comment)
+    parent_replies_count UInt32
+
+union GetSiblingsError
+    bad_thread_id
+    bad_comment_id
+
+# --
+
+route get_replies (GetRepliesArg, GetRepliesResult, GetRepliesError)
+    "Returns the specified comment and its descendants."
+
+    attrs
+        auth = "user_optional"
+        cache_control_ttl_if_noauth = 15
+
+struct GetRepliesArg
+    thread_id ThreadId
+    comment_id CommentId
+    max_depth MaxDepth = 5
+    max_replies_per_level MaxRepliesPerLevel = 100
+
+struct GetRepliesResult
+    thread ThreadInfo
+    top Comment
+        "This is the specified comment. See :field:`Comment.replies` for
+        traversing the tree of replies."
+
+union GetRepliesError
+    bad_thread_id
+    bad_comment_id
+
+# --
+
+route get_breadcrumb (GetBreadcrumbArg, GetBreadcrumbResult, GetBreadcrumbError)
+
+struct GetBreadcrumbArg
+    thread_id ThreadId
+
+struct GetBreadcrumbResult
+    entry_id String(min_length=1)?
+
+union GetBreadcrumbError
+    bad_thread_id

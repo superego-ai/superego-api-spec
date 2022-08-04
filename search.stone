@@ -1,0 +1,37 @@
+
+namespace search
+
+import feed
+import user
+
+route omni(OmniArg, OmniResult, Void)
+    "Search for matching users and feeds based on search query.
+
+    Does not return feeds with no followers."
+    attrs
+        auth = "user_optional"
+
+struct OmniArg
+    q String(min_length=3, max_length=50)
+
+struct OmniResult
+    users List(feed.FeedInfo)
+        "List of the ego feeds for users whose username matches the search
+        query."
+    feeds List(feed.FeedInfo)
+        "List of all feeds whose names match the search query."
+    hashtags List(feed.FeedInfo)
+        "List of all hashtags whose names match the search query."
+
+# --
+
+route query_authors(QueryAuthorsArg, QueryAuthorsResult, Void)
+    "Search for matching users who have registered as authors."
+    attrs
+        auth = "user_optional"
+
+struct QueryAuthorsArg
+    q String(min_length=3, max_length=50)
+
+struct QueryAuthorsResult
+    matches List(user.UserInfo)
